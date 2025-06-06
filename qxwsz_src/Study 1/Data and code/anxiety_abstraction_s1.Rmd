@@ -1,0 +1,924 @@
+---
+title: "Anxiety and Fear Differ in Construal Level and Scope / Study 1"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+This R Markdown file present the analysis procedure and results for Study 1 in the project: "Anxiety and Fear Differ in Construal Level and Scope"
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Session info
+
+```{r session info, echo=FALSE}
+message(paste("#", capture.output(sessionInfo()), "\n", collapse =""))
+# R version 4.1.2 (2021-11-01) 
+# Platform: x86_64-w64-mingw32/x64 (64-bit) 
+# Running under: Windows 10 x64 (build 19042) 
+#  
+# Matrix products: default 
+#  
+# locale: 
+# [1] LC_COLLATE=Swedish_Sweden.1252  LC_CTYPE=Swedish_Sweden.1252    LC_MONETARY=Swedish_Sweden.1252 
+# [4] LC_NUMERIC=C                    LC_TIME=Swedish_Sweden.1252     
+#  
+# attached base packages: 
+# [1] stats     graphics  grDevices utils     datasets  methods   base      
+#  
+# other attached packages: 
+#  [1] openxlsx_4.2.5  fastmatch_1.1-3 readxl_1.3.1    forcats_0.5.1   stringr_1.4.0   dplyr_1.0.8     
+#  [7] purrr_0.3.4     readr_2.1.2     tidyr_1.2.0     tibble_3.1.6    ggplot2_3.3.5   tidyverse_1.3.1 
+#   
+```
+
+## Preparation: Load packages and dataset
+
+```{r packages, message=FALSE, results='hide', warning=FALSE}
+# Required packages
+pkgs <- c("tidyverse","readxl","fastmatch","openxlsx","corrplot","readr",
+          "ggplot2","cowplot","ggpubr","PupillometryR","rstatix")
+
+# RUn the two lines below to heck to see if packages are installed. Install them if they are not, then load them into the R session.
+#new.pkgs <- pkgs[!(pkgs %in% installed.packages()[, "Package"])]
+
+#if (length(new.pkgs)) install.packages(new.pkgs, dependencies = TRUE)
+
+lapply(pkgs, library, character.only = TRUE)
+
+# Import data
+df_full <- read.csv(file = "anxiety_abstraction_s1.csv", head = TRUE, sep=";")
+```
+
+## The code (developed by Yeomans, 2021) below was used to create the linguistic concreteness index.
+
+```{r, eval=FALSE}
+# Load the raw data that contains the text to be analyzed
+RawData <- readxl::read_xlsx("anxiety_abstraction_study1_raw.xlsx")
+
+# ==== upload libraries ====
+library(tidytext)
+library(tidyverse)
+
+# === upload dics ====
+
+load("brysbaert_dic.RData") 
+brysbaert_dic$Word<-tolower(brysbaert_dic$Word)
+
+load("bigrams_brysbaert.RData")
+bigrams_brysbaert$Word <- tolower(bigrams_brysbaert$Word)
+
+# ==== function: "cleantext" =====
+#' @description background function to load.
+#' uses background functions: 
+#' (1) textformat; (2) ctxpand ; 
+#' @param text character Vector of strings to clean.
+#' @param language character Language to use for cleaning. Default is "english".
+#' @param punct logical Should punctuation be kept as tokens? Default is TRUE.
+#' @param stop.words logical Should stop words be kept? default is TRUE.
+#' @param number.words logical Should numbers be converted to words? default is TRUE.
+#' @return character Vector of cleaned strings.
+
+cleantext<-function(text, language="english", punct=FALSE,
+                    stop.words=TRUE, number.words=TRUE){
+  
+  #PUTS ALL LETTERS IN LOWER CASE
+  text<-tolower(text)
+  text<-textformat(text, punct)
+  
+  #EXPANDS CONTRACTIONS
+  if(language=="english"){
+    text<-ctxpand(text)
+  }
+  
+  #DELETES PUNCTUATION & HTML JUNK
+  text<-gsub("[[:punct:]]", " ", text,perl=TRUE)
+  
+  #DELETES STOP WORDS
+  if(length(stop.words)>1){
+    text<-tm::removeWords(text, stop.words)
+  }else if(!stop.words){
+    text<-tm::removeWords(text, tm::stopwords(language))
+  }
+  
+  # NUMBERS CONVERTED TO WORDS
+  if(number.words){
+    text<-strsplit(text," ")[[1]]
+    nx<-suppressWarnings(as.numeric(text))
+    
+    text[!is.na(nx)]<-as.character(english::as.english(nx[!is.na(nx)]))
+    text<-paste(text,collapse=" ")
+  } else {  #DELETES NUMBERS
+    text<-tm::removeNumbers(text)
+  }
+  
+  text<-tm::stripWhitespace(text) # Strip extra white spaces 
+  return(as.character(text))
+}
+
+# ==== function: "textformat" =====
+#' @description background function to load.
+#' @param text character Vector of strings to clean.
+#' @param punct logical Should punctuation be kept as tokens? Default is FALSE.
+#' @return character Vector of cleaned strings.
+
+textformat<-function(text, punct=FALSE){
+  text <- gsub(" ?(f|ht)tp(s?)://(.*)[.][a-z]+", "", text,perl=TRUE)
+  text <- gsub("www.(.*)[.][a-z]+", "", text,perl=TRUE)
+  text <- gsub("\u201D", "\"", text,perl=TRUE)
+  text <- gsub("\u201C", "\"", text,perl=TRUE)
+  text <- gsub("\u2019", "\'", text,perl=TRUE)
+  
+  text<-gsub("ha ha"," haha ",text,fixed=TRUE)
+  text<-gsub("lol "," haha ",text,fixed=TRUE)
+  text<-gsub("lol."," haha.",text,fixed=TRUE)
+  text<-gsub("lol!"," haha!",text,fixed=TRUE)
+  text<-gsub("Lol "," haha ",text,fixed=TRUE)
+  text<-gsub("Lol."," haha.",text,fixed=TRUE)
+  text<-gsub("Lol!"," haha!",text,fixed=TRUE)
+  text<-gsub("LOL"," haha ",text,fixed=TRUE)
+  text<-gsub("LOl"," haha ",text,fixed=TRUE)
+  text<-gsub("LOl"," haha ",text,fixed=TRUE)
+  text<-gsub("LoL"," haha ",text,fixed=TRUE)
+  text<-gsub("ROFL"," haha ",text,fixed=TRUE)
+  text<-gsub("rofl"," haha ",text,fixed=TRUE)
+  for (x in 1:8){
+    text<-gsub(".?","?",text,fixed=TRUE)
+    text<-gsub("?.","?",text,fixed=TRUE)
+    text<-gsub("!?","?",text,fixed=TRUE)
+    text<-gsub("?!","?",text,fixed=TRUE)
+    text<-gsub("??","?",text,fixed=TRUE)
+    text<-gsub("!!","!",text,fixed=TRUE)
+  }
+  if(punct){
+    text<-gsub("!"," xmark.",text,fixed=TRUE)
+    text<-gsub("?"," qmark.",text,fixed=TRUE)
+  }
+  text<-gsub("||",". ",text,fixed=TRUE)
+  text<-gsub("|",". ",text,fixed=TRUE)
+  text<-gsub("[[:cntrl:]]", " ", text,perl=TRUE)
+  return(text)
+}
+
+# ==== function: "ctxpand" / Contraction Expander ====
+#' @description background function to load.
+#' @param text character vector of sentences to un-contract.
+#' @return character Vector of sentences without contractions.
+
+ctxpand<-function(text){
+  text <- gsub("let's", "let us", text, fixed=TRUE)
+  text <- gsub("i'm", "i am", text, fixed=TRUE)
+  text <- gsub("won't", "will not", text, fixed=TRUE)
+  text <- gsub("can't", "cannot", text, fixed=TRUE)
+  text <- gsub("Let's", "Let us", text, fixed=TRUE)
+  text <- gsub("I'm", "I am", text, fixed=TRUE)
+  text <- gsub("Won't", "Will not", text, fixed=TRUE)
+  text <- gsub("Can't", "Cannot", text, fixed=TRUE)
+  text <- gsub("shan't", "shall not", text, fixed=TRUE)
+  text <- gsub("'d", " would", text, fixed=TRUE)
+  text <- gsub("'ve", " have", text, fixed=TRUE)
+  text <- gsub("'s", " is", text, fixed=TRUE)
+  text <- gsub("'ll", " will", text, fixed=TRUE)
+  text <- gsub("'re", " are", text, fixed=TRUE)
+  text <- gsub("n't", " not", text, fixed=TRUE)
+  text <- gsub("u.s.", "US", text, fixed=TRUE)
+  text <- gsub("U.S.", "US", text, fixed=TRUE)
+  text <- gsub("e.g.", "eg", text, fixed=TRUE)
+  text <- gsub("i.e.", "ie", text, fixed=TRUE)
+  return(text)
+}
+
+# ==== function: "conc_score" ====
+
+conc_score <- function(text, ngrams = T, samp_ave = NULL, stop.words = T, number.words = T){
+  #text character object
+  #ngrams logic if TRUE include bigrams in computation, if FALSE ignore bigrams 
+  #samp_ave integer indicating the sample average of concrete score over participants
+  #stop.words and number.words are logistic and belong to clean text function
+  
+  text <- iconv(textclean::replace_non_ascii(text),to="ASCII",sub=" ") # clean from non ASCII characters
+  text[is.na(text) | stringr::str_count(text, "[[:alpha:]]+")==0] <- " . " # clean special characters
+  
+  # CLEAN TEXT FUNCTION
+  ctext <- cleantext(text) # normalize the text before comparing it to the dics
+  
+  # BIGRAMS
+  if (ngrams) {
+    bigrams <- data.frame(t = ctext) # make a data frame for tidytext next function
+    bigrams <- unnest_tokens(bigrams, input = t, output = Word, token = "ngrams", n = 2) # build bigrams tokens
+    
+    bigrams <- bigrams %>% left_join(bigrams_brysbaert, by = "Word") # match to dic before lemmatisation
+    bigrams$Word[is.na(bigrams$Conc.M)] <- textstem::lemmatize_words(bigrams$Word[is.na(bigrams$Conc.M)]) # lemmatize na's
+    
+    bigrams <- bigrams %>% select(-Conc.M) %>% left_join(bigrams_brysbaert, by = "Word") %>% drop_na() # match to dic
+    
+    # REMOVE FOUND BIGRAMS
+    if(nrow(bigrams > 0)) {
+      ctext <- str_remove_all(ctext, str_c(bigrams$Word ,collapse = "|")) %>% tm::stripWhitespace()}
+  }
+  else {bigrams <- data.frame()} # empty df for combine allwords
+ 
+  # TEXT WORDS
+  words <- data.frame(t = ctext) # make a data frame for tidytext next function
+  words <- unnest_tokens(words, input = t, output = Word, token = "words") # build one-word-per-row
+  
+  words <- words %>% left_join(brysbaert_dic, by = "Word") # match to dic before lemmatisation
+  words$Word[is.na(words$Conc.M)] <- textstem::lemmatize_words(words$Word[is.na(words$Conc.M)]) # lemmatize na's
+  
+  # IF/ELSE: WORDS NOT FOUND IN DIC
+  # if not given a sample average, concrete score will be calculated only with words found in dic
+  # else words not found in dic will be given the sample average  
+  
+  if(is.null(samp_ave)){ 
+    words <- words %>% select(-Conc.M) %>% left_join(brysbaert_dic, by = "Word") %>% drop_na() # match to dic
+  }
+  else{
+    words <- words %>% select(-Conc.M) %>% left_join(brysbaert_dic, by = "Word") %>% 
+      mutate(Conc.M = replace_na(Conc.M, samp_ave)) # match to dic and give sample average
+  }
+  
+  allWords <- rbind(bigrams, words) # combine bigrams with words
+  
+  conc <- mean(allWords$Conc.M, na.rm = T) # concrete score
+  
+  return(conc)
+}
+
+RawData = RawData %>% rowwise %>%  mutate(concreteness = conc_score(text))
+
+# This datafile which now contains a linguistic abstraction index was imported
+# in LIWC to obtain the linguistic mental scope variables (I, They, Future)
+
+RawData$subject <- c(1:nrow(RawData)) # Add subject ID
+RawData %>%
+ dplyr::select(subject,StartDate,EndDate,
+               RecordedDate,"Duration(inseconds)",
+               text,"rt_recalltask_Page Submit",
+               emotion,failed_instructions,BCI=concreteness,
+               abstract,temporal,social,physical,
+               hypothetical,fear1:fear3,anxious1:anxious3,
+               english,serious,recall,bot_check,
+               age,gender) %>%
+  write.csv(., file = "study1_BCI.csv", row.names = FALSE)
+```
+
+## Preregistered exclusions:
+- Spent less than 120 seconds on the entire experiment
+- Indicated low English understanding of the experiment (<5 on a 7-point scale)
+- Indicated low seriousness in responses (<4 on a 5-point scale)
+- Failed instructions in the emotion induction task (coded manually)
+
+```{r exclusions}
+# Exclude those who spent less than 2 minutes on the entire survey
+df_ex <- df_full %>% filter("Duration(inseconds)" >= 120)
+
+# Exclude those who reported low English understanding
+df_ex <- df_ex %>% filter(english >= 5)
+
+# Exclude those who indicated not being serious while filling out the survey
+df_ex <- df_ex %>% filter(serious >= 4)
+
+# Exclude those who did not follow instructions in the recall task
+df_ex <- df_ex %>% filter(failed_instructions == 0)
+```
+
+## Self-reported fear and anxiety
+
+```{r manipulation checks}
+# Create fear manipulation check variable
+fear_items <- c("fear1","fear2","fear3")
+df_ex <- df_ex %>% mutate(mc_fear = rowMeans(
+  select(., all_of(fear_items))))
+
+# Create anxiety manipulation check
+anxiety_items <- c("anxious1","anxious2","anxious3")
+df_ex <- df_ex %>% mutate(mc_anxiety = rowMeans(
+  select(., all_of(anxiety_items))))
+
+# Check Cronbach's alphas
+## Self-reported fear
+df_ex %>%
+  select(fear1,fear2,fear3) %>%
+  psych::alpha(title = "fear MC")
+
+## Self-reported anxiety
+df_ex %>%
+  select(anxious1,anxious2,anxious3) %>%
+  psych::alpha(title = "anxiety MC")
+
+# Means and SDs
+df_ex %>%
+  group_by(emotion) %>%
+  summarise_at(vars(mc_fear,mc_anxiety),
+               list(mean=mean, sd=sd))
+
+# Independent samples t test for self-reported fear
+t.test_fear <- df_ex %>%
+  rstatix::t_test(mc_fear ~ emotion,
+                  var.equal = TRUE,
+                  detailed = TRUE) %>% 
+  rstatix::add_significance()
+
+t.test_fear
+
+## effect size and CIs
+psych::cohen.d(df_ex$mc_fear,
+               df_ex$emotion,
+               alpha=.05,
+               std=TRUE,
+               sort=NULL,
+               dictionary=NULL,
+               MD=TRUE,
+               data=NULL)
+
+# Independent samples t test for self-reported anxiety
+t.test_anxiety <- df_ex %>%
+  rstatix::t_test(mc_anxiety ~ emotion,
+                  var.equal = TRUE,
+                  detailed = T) %>% 
+  rstatix::add_significance()
+
+t.test_anxiety
+
+## effect size and CIs
+psych::cohen.d(df_ex$mc_anxiety,
+               df_ex$emotion,
+               alpha=.05,
+               std=TRUE,
+               sort=NULL,
+               dictionary=NULL,
+               MD=TRUE,
+               data=NULL)
+
+# Independent samples t test for recall ability
+t.test_recall <- df_ex %>%
+  rstatix::t_test(recall ~ emotion,
+                  var.equal = TRUE,
+                  detailed = T) %>% 
+  rstatix::add_significance()
+
+t.test_recall
+
+## effect size and CIs
+psych::cohen.d(df_ex$recall,
+               df_ex$emotion,
+               alpha=.05,
+               std=TRUE,
+               sort=NULL,
+               dictionary=NULL,
+               MD=TRUE,
+               data=NULL)
+```
+
+## Hypothesis testing
+
+```{r hypothesis testing}
+
+#### ABSTRACTION ####
+
+## Means and SDs of the two abstraction measures
+df_ex %>%
+  group_by(emotion) %>%
+  summarise_at(vars(BCI, abstract),
+               list(mean=mean, sd=sd))
+
+# Linguistic abstraction
+
+## Independent samples t test for BCI
+t.test_BCI <- df_ex %>%
+  rstatix::t_test(BCI ~ emotion,
+                  var.equal = TRUE,
+                  alternative = "greater",
+                  conf.level = 0.90,
+                  p.adjust.method = "holm",
+                  paired = FALSE,
+                  detailed = T) %>% 
+  rstatix::add_significance()
+
+t.test_BCI
+
+## Effect size and CI 
+psych::cohen.d(df_ex$BCI,
+               df_ex$emotion,
+               alpha=.10,
+               std=TRUE,
+               sort=NULL,
+               dictionary=NULL,
+               MD=TRUE,
+               data=NULL)
+
+## Independent samples t test for self-reported abstraction
+t.test_abstract <- df_ex %>%
+  rstatix::t_test(abstract ~ emotion,
+                  var.equal = TRUE,
+                  alternative = "less",
+                  conf.level = 0.90,
+                  p.adjust.method = "holm",
+                  paired = FALSE,
+                  detailed = T) %>% 
+  rstatix::add_significance()
+
+t.test_abstract
+
+## Effect size and CI 
+psych::cohen.d(df_ex$abstract,
+               df_ex$emotion,
+               alpha=.10,
+               std=TRUE,
+               sort=NULL,
+               dictionary=NULL,
+               MD=TRUE,
+               data=NULL)
+
+#### PSYCHOLOGICAL DISTANCE ###
+
+## Means and SDs of the self-reported psych distance variables
+df_ex %>%
+  group_by(emotion) %>%
+  summarise_at(vars(temporal,social,physical,hypothetical),
+               list(mean=mean, sd=sd))
+
+## Independent samples t test for self-reported temporal distance
+t.test_temporal <- df_ex %>%
+  rstatix::t_test(temporal ~ emotion,
+                  var.equal = TRUE,
+                  alternative = "less",
+                  conf.level = 0.90,
+                  p.adjust.method = "holm",
+                  paired = FALSE,
+                  detailed = T) %>% 
+  rstatix::add_significance()
+
+t.test_temporal
+
+## Effect size and CI 
+psych::cohen.d(df_ex$temporal,
+               df_ex$emotion,
+               alpha=.10,
+               std=TRUE,
+               sort=NULL,
+               dictionary=NULL,
+               MD=TRUE,
+               data=NULL)
+
+## Independent samples t test for self-reported social distance
+t.test_social <- df_ex %>%
+  rstatix::t_test(social ~ emotion,
+                  var.equal = TRUE,
+                  alternative = "less",
+                  conf.level = 0.90,
+                  p.adjust.method = "holm",
+                  paired = FALSE,
+                  detailed = T) %>% 
+  rstatix::add_significance()
+
+t.test_social
+
+## Effect size and CI
+psych::cohen.d(df_ex$social,
+               df_ex$emotion,
+               alpha=.10,
+               std=TRUE,
+               sort=NULL,
+               dictionary=NULL,
+               MD=TRUE,
+               data=NULL)
+
+## Independent samples t test for self-reported physical distance
+t.test_physical <- df_ex %>%
+  rstatix::t_test(physical ~ emotion,
+                  var.equal = TRUE,
+                  alternative = "less",
+                  conf.level = 0.90,
+                  p.adjust.method = "holm",
+                  paired = FALSE,
+                  detailed = T) %>% 
+  rstatix::add_significance()
+
+t.test_physical
+
+## Effect size and CI
+psych::cohen.d(df_ex$physical,
+               df_ex$emotion,
+               alpha=.10,
+               std=TRUE,
+               sort=NULL,
+               dictionary=NULL,
+               MD=TRUE,
+               data=NULL)
+
+## Independent samples t test for self-reported hypotheticality 
+t.test_hypothetical <- df_ex %>%
+  rstatix::t_test(hypothetical ~ emotion,
+                  var.equal = TRUE,
+                  alternative = "less",
+                  conf.level = 0.9,
+                  p.adjust.method = "holm",
+                  paired = FALSE,
+                  detailed = T) %>% 
+  rstatix::add_significance()
+
+t.test_hypothetical
+
+## Effect size and CI
+psych::cohen.d(df_ex$hypothetical,
+               df_ex$emotion,
+               alpha=.10,
+               std=TRUE,
+               sort=NULL,
+               dictionary=NULL,
+               MD=TRUE,
+               data=NULL)
+
+## Means and SDs of the linguistic scope variables
+df_ex %>%
+  group_by(emotion) %>%
+  summarise_at(vars(i,they,focusfuture),
+               list(mean=mean, sd=sd))
+
+## Independent samples t test for linguistic scope ("I")
+t.test_i <- df_ex %>%
+  rstatix::t_test(i ~ emotion,
+                  var.equal = TRUE,
+                  alternative = "greater",
+                  conf.level = 0.90,
+                  p.adjust.method = "holm",
+                  paired = FALSE,
+                  detailed = T) %>% 
+  rstatix::add_significance()
+
+t.test_i
+
+## Effect size and CI
+psych::cohen.d(df_ex$i,
+               df_ex$emotion,
+               alpha=.10,
+               std=TRUE,
+               sort=NULL,
+               dictionary=NULL,
+               MD=TRUE,
+               data=NULL)
+
+## Independent samples t test for linguistic scope ("They")
+t.test_they <- df_ex %>%
+  rstatix::t_test(they ~ emotion,
+                  var.equal = TRUE,
+                  alternative = "less",
+                  conf.level = 0.90,
+                  p.adjust.method = "holm",
+                  paired = FALSE,
+                  detailed = T) %>% 
+  rstatix::add_significance()
+
+t.test_they
+
+## Effect size and CI
+psych::cohen.d(df_ex$they,
+               df_ex$emotion,
+               alpha=.10,
+               std=TRUE,
+               sort=NULL,
+               dictionary=NULL,
+               MD=TRUE,
+               data=NULL)
+
+## Independent samples t test for linguistic scope ("focusfuture)
+t.test_future <- df_ex %>%
+  rstatix::t_test(focusfuture ~ emotion,
+                  var.equal = TRUE,
+                  alternative = "less",
+                  conf.level = 0.90,
+                  p.adjust.method = "holm",
+                  paired = FALSE,
+                  detailed = T) %>% 
+  rstatix::add_significance()
+
+t.test_future
+
+## Effect size and CI
+psych::cohen.d(df_ex$focusfuture,
+               df_ex$emotion,
+               alpha=.10,
+               std=TRUE,
+               sort=NULL,
+               dictionary=NULL,
+               MD=TRUE,
+               data=NULL)
+```
+
+## Correlations
+
+```{r correlations}
+ corr_df <- df_ex %>%
+   dplyr::select(emotion,BCI,abstract,temporal,social,
+                 physical,hypothetical)
+
+ corr_df$emotion <- as.numeric(corr_df$emotion)
+
+# Run code chunk below to create correlation table (remove hashtags)
+  apaTables::apa.cor.table(
+  corr_df,
+  #filename = "study1_corrtable.doc",
+  show.conf.interval = TRUE,
+  show.sig.stars = TRUE,
+  landscape = TRUE
+)
+
+# Obtain the p-values of correlations
+Hmisc::rcorr(as.matrix(corr_df),type="pearson")
+
+# Plot correlations
+ M = cor(corr_df)
+
+ testRes = cor.mtest(corr_df, conf.level = 0.95)
+
+ corrplot(M, p.mat = testRes$p,
+          diag = FALSE,
+          type = 'upper',
+          sig.level = c(0.001, 0.01, 0.05, 0.1),
+          pch.cex = 0.9,
+          insig = 'label_sig',
+          tl.col="black")
+```
+
+## Raincloud plots
+
+```{r raincloud, warning=FALSE}
+df_ex <- df_ex %>% 
+  dplyr::select(emotion,abstract,BCI,temporal,social,
+                physical,hypothetical)
+
+df_ex$emotion <- df_ex$emotion %>%
+  factor(levels = c(0, 1), labels = c("Fear","Anxiety"))
+
+# Raincloud plot: perceived threat abstractness 
+df_sum1 <- df_ex %>%
+  group_by(emotion) %>%
+  summarise( 
+    n=n(),
+    mean=mean(abstract),
+    sd=sd(abstract)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ci=se * qt((1-0.05)/2 + .5, n-1))
+
+raincloud1 <- ggplot(df_ex, aes(x = emotion,
+                          y = abstract,
+                          fill = emotion)) +
+  geom_flat_violin(aes(fill = emotion),
+                   position = position_nudge(x = .1, y = 1),
+                   adjust = 1, trim = FALSE,
+                   alpha = .5, colour = NA) +
+  geom_point(aes(x = as.numeric(emotion)-.15,
+                 y = abstract, colour = emotion),
+             position = position_jitter(width = .05),
+             size = 1,
+             shape = 20) +
+  geom_boxplot(aes(x = emotion,
+                   y = abstract,
+                   fill = emotion),
+               outlier.shape = NA,
+               alpha = .5,
+               width = .1,
+               colour = "black") +
+  scale_colour_brewer(palette = "Set2") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y= "Perceived threat abstractness") +
+  theme_cowplot(font_size = 14, font_family = "serif") +
+  theme(legend.position = "none") +
+  theme(axis.title.x = element_blank()) +
+  scale_y_continuous(labels = scales::label_number(accuracy = 1),
+                     limits = c(0,9))+
+  geom_errorbar(data = df_sum1,
+                aes(x = as.numeric(emotion)-.002,
+                    y = mean,
+                    group = emotion,
+                    ymin = mean-ci,
+                    ymax = mean+ci),
+                width = .05) +
+  stat_summary(fun="mean",
+               colour="grey",
+               geom="line",
+               aes(group = 1)) +
+    geom_point(stat="summary",
+             fun="mean",
+             size=2)
+
+raincloud1
+
+# Raincloud plot 2: physical distance 
+df_sum2 <- df_ex %>%
+  group_by(emotion) %>%
+  summarise( 
+    n=n(),
+    mean=mean(physical),
+    sd=sd(physical)
+  ) %>%
+  mutate(se=sd/sqrt(n))  %>%
+  mutate(ci=se * qt((1-0.05)/2 + .5, n-1))
+
+raincloud2 <- ggplot(df_ex, aes(x = emotion,
+                          y = physical,
+                          fill = emotion)) +
+  geom_flat_violin(aes(fill = emotion),
+                   position = position_nudge(x = .1, y = 1),
+                   adjust = 1, trim = FALSE,
+                   alpha = .5, colour = NA) +
+  geom_point(aes(x = as.numeric(emotion)-.15,
+                 y = physical, colour = emotion),
+             position = position_jitter(width = .05),
+             size = 1,
+             shape = 20) +
+  geom_boxplot(aes(x = emotion,
+                   y = physical,
+                   fill = emotion),
+               outlier.shape = NA,
+               alpha = .5,
+               width = .1,
+               colour = "black") +
+  scale_colour_brewer(palette = "Set2") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y= "Physical distance of threat") +
+  theme_cowplot(font_size = 14, font_family = "serif") +
+  theme(legend.position = "none") +
+  theme(axis.title.x = element_blank()) +
+  scale_y_continuous(labels = scales::label_number(accuracy = 1),
+                     limits = c(0,7))+
+  geom_errorbar(data = df_sum2,
+                aes(x = as.numeric(emotion)-.002,
+                    y = mean,
+                    group = emotion,
+                    ymin = mean-ci,
+                    ymax = mean+ci),
+                width = .05) +
+  stat_summary(fun="mean",
+               colour="grey",
+               geom="line",
+               aes(group = 1)) +
+    geom_point(stat="summary",
+             fun="mean",
+             size=2)
+
+# Raincloud plot 3: hypotheticality 
+df_sum3 <- df_ex %>%
+  group_by(emotion) %>%
+  summarise( 
+    n=n(),
+    mean=mean(hypothetical),
+    sd=sd(hypothetical)
+  ) %>%
+  mutate(se=sd/sqrt(n))  %>%
+  mutate(ci=se * qt((1-0.05)/2 + .5, n-1))
+
+raincloud3 <- ggplot(df_ex, aes(x = emotion,
+                          y = hypothetical,
+                          fill = emotion)) +
+  geom_flat_violin(aes(fill = emotion),
+                   position = position_nudge(x = .1, y = 1),
+                   adjust = 1, trim = FALSE,
+                   alpha = .5, colour = NA) +
+  geom_point(aes(x = as.numeric(emotion)-.15,
+                 y = hypothetical, colour = emotion),
+             position = position_jitter(width = .05),
+             size = 1,
+             shape = 20) +
+  geom_boxplot(aes(x = emotion,
+                   y = hypothetical,
+                   fill = emotion),
+               outlier.shape = NA,
+               alpha = .5,
+               width = .1,
+               colour = "black") +
+  scale_colour_brewer(palette = "Set2") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y= "Hypotheticality of threat") +
+  theme_cowplot(font_size = 14, font_family = "serif") +
+  theme(legend.position = "none") +
+  theme(axis.title.x = element_blank()) +
+  scale_y_continuous(labels = scales::label_number(accuracy = 1),
+                     limits = c(0,7))+
+  geom_errorbar(data = df_sum3,
+                aes(x = as.numeric(emotion)-.002,
+                    y = mean,
+                    group = emotion,
+                    ymin = mean-ci,
+                    ymax = mean+ci),
+                width = .05) +
+  stat_summary(fun="mean",
+               colour="grey",
+               geom="line",
+               aes(group = 1)) +
+    geom_point(stat="summary",
+             fun="mean",
+             size=2)
+
+# Raincloud plot 4: social distance
+df_sum4 <- df_ex %>%
+  group_by(emotion) %>%
+  summarise( 
+    n=n(),
+    mean=mean(social),
+    sd=sd(social)
+  ) %>%
+  mutate(se=sd/sqrt(n))  %>%
+  mutate(ci=se * qt((1-0.05)/2 + .5, n-1))
+
+raincloud4 <- ggplot(df_ex, aes(x = emotion,
+                          y = social,
+                          fill = emotion)) +
+  geom_flat_violin(aes(fill = emotion),
+                   position = position_nudge(x = .1, y = 1),
+                   adjust = 1, trim = FALSE,
+                   alpha = .5, colour = NA) +
+  geom_point(aes(x = as.numeric(emotion)-.15,
+                 y = social, colour = emotion),
+             position = position_jitter(width = .05),
+             size = 1,
+             shape = 20) +
+  geom_boxplot(aes(x = emotion,
+                   y = social,
+                   fill = emotion),
+               outlier.shape = NA,
+               alpha = .5,
+               width = .1,
+               colour = "black") +
+  scale_colour_brewer(palette = "Set2") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y= "Social distance of threat") +
+  theme_cowplot(font_size = 14, font_family = "serif") +
+  theme(legend.position = "none") +
+  theme(axis.title.x = element_blank()) +
+  scale_y_continuous(labels = scales::label_number(accuracy = 1),
+                     limits = c(0,7))+
+  geom_errorbar(data = df_sum4,
+                aes(x = as.numeric(emotion)-.002,
+                    y = mean,
+                    group = emotion,
+                    ymin = mean-ci,
+                    ymax = mean+ci),
+                width = .05) +
+  stat_summary(fun="mean",
+               colour="grey",
+               geom="line",
+               aes(group = 1)) +
+    geom_point(stat="summary",
+             fun="mean",
+             size=2)
+
+# Raincloud plot 5: temporal distance
+df_sum5 <- df_ex %>%
+  group_by(emotion) %>%
+  summarise( 
+    n=n(),
+    mean=mean(temporal),
+    sd=sd(temporal)
+  ) %>%
+  mutate(se=sd/sqrt(n))  %>%
+  mutate(ci=se * qt((1-0.05)/2 + .5, n-1))
+
+raincloud5 <- ggplot(df_ex, aes(x = emotion,
+                          y = temporal,
+                          fill = emotion)) +
+  geom_flat_violin(aes(fill = emotion),
+                   position = position_nudge(x = .1, y = 1),
+                   adjust = 1, trim = FALSE,
+                   alpha = .5, colour = NA) +
+  geom_point(aes(x = as.numeric(emotion)-.15,
+                 y = temporal, colour = emotion),
+             position = position_jitter(width = .05),
+             size = 1,
+             shape = 20) +
+  geom_boxplot(aes(x = emotion,
+                   y = temporal,
+                   fill = emotion),
+               outlier.shape = NA,
+               alpha = .5,
+               width = .1,
+               colour = "black") +
+  scale_colour_brewer(palette = "Set2") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y= "Temporal distance of threat") +
+  theme_cowplot(font_size = 14, font_family = "serif") +
+  theme(legend.position = "none") +
+  theme(axis.title.x = element_blank()) +
+  scale_y_continuous(labels = scales::label_number(accuracy = 1),
+                     limits = c(0,7))+
+  geom_errorbar(data = df_sum5,
+                aes(x = as.numeric(emotion)-.002,
+                    y = mean,
+                    group = emotion,
+                    ymin = mean-ci,
+                    ymax = mean+ci),
+                width = .05) +
+  stat_summary(fun="mean",
+               colour="grey",
+               geom="line",
+               aes(group = 1)) +
+    geom_point(stat="summary",
+             fun="mean",
+             size=2)
+
+ggpubr::ggarrange(raincloud2,raincloud3,raincloud4,raincloud5)
+```
